@@ -4,6 +4,7 @@ All notable changes to `siberfx/facebook-autopost` are documented here. This pro
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+n## [1.0.0] - 2026-10-11
 
 ### Added
 - Connect one Facebook Page with Facebook Login. The Page is chosen from the Pages the account manages (`FACEBOOK_PAGE_ID`, or the first one).
