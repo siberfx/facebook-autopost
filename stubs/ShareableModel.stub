@@ -1,0 +1,33 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
+use Siberfx\FacebookAutopost\Concerns\PostsToFacebook;
+use Siberfx\FacebookAutopost\Contracts\ShareableOnFacebook;
+use Siberfx\FacebookAutopost\Posts\FacebookPost;
+
+/**
+ * Example: a model that is posted to Facebook when it goes live.
+ *
+ * 1. implement ShareableOnFacebook and use PostsToFacebook;
+ * 2. say when it is live (isLiveForFacebook);
+ * 3. say what to post (toFacebookPost).
+ */
+class Article extends Model implements ShareableOnFacebook
+{
+    use PostsToFacebook;
+
+    public function isLiveForFacebook(): bool
+    {
+        return $this->status === 'published';
+    }
+
+    public function toFacebookPost(): FacebookPost
+    {
+        return FacebookPost::make(url: route('articles.show', $this), title: $this->title)
+            ->description(Str::limit(strip_tags((string) $this->excerpt), 250))
+            ->commentary("{title}\n\n{url}");
+    }
+}

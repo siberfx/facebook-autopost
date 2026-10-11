@@ -1,0 +1,84 @@
+<?php
+
+declare(strict_types=1);
+
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Encryption\Encrypter;
+use Illuminate\Support\Facades\DB;
+use Siberfx\FacebookAutopost\Contracts\TokenStore;
+use Siberfx\FacebookAutopost\Data\StoredConnection;
+use Siberfx\FacebookAutopost\Stores\DatabaseTokenStore;
+
+function storedConnection(string $token = 'member-token'): StoredConnection
+{
+    return new StoredConnection(
+        accessToken: $token,
+        pageId: '1234567',
+        userAccessToken: 'user-token',
+        name: 'Ada Lovelace',
+        picture: 'https://media.example.com/a.jpg',
+        expiresAt: CarbonImmutable::parse('2026-12-01 10:00:00'),
+        connectedAt: CarbonImmutable::parse('2026-10-02 10:00:00'),
+    );
+}
+
+it('is the default TokenStore binding', function () {
+    expect(app(TokenStore::class))->toBeInstanceOf(DatabaseTokenStore::class);
+});
+
+it('returns null when nothing is stored', function () {
+    expect(app(TokenStore::class)->get())->toBeNull();
+});
+
+it('round-trips a connection', function () {
+    $store = app(TokenStore::class);
+    $store->put(storedConnection());
+
+    $back = $store->get();
+
+    expect($back)->toBeInstanceOf(StoredConnection::class)
+        ->and($back->accessToken)->toBe('member-token')
+        ->and($back->pageId)->toBe('1234567')
+        ->and($back->name)->toBe('Ada Lovelace')
+        ->and($back->expiresAt?->toDateTimeString())->toBe('2026-12-01 10:00:00');
+});
+
+it('encrypts the token at rest', function () {
+    app(TokenStore::class)->put(storedConnection('plain-secret-token'));
+
+    $raw = DB::table('facebook_connections')->value('access_token');
+
+    expect($raw)->not->toContain('plain-secret-token');
+});
+
+it('keeps a single row when connecting again', function () {
+    $store = app(TokenStore::class);
+    $store->put(storedConnection('first'));
+    $store->put(storedConnection('second'));
+
+    expect(DB::table('facebook_connections')->count())->toBe(1)
+        ->and($store->get()?->accessToken)->toBe('second');
+});
+
+it('forgets the connection', function () {
+    $store = app(TokenStore::class);
+    $store->put(storedConnection());
+    $store->forget();
+
+    expect($store->get())->toBeNull();
+});
+
+// As after APP_KEY was rotated since connecting.
+it('treats an undecryptable token as not connected', function () {
+    app(TokenStore::class)->put(storedConnection());
+
+    // Same effect as a new APP_KEY: Eloquent decrypts with a different key.
+    Model::encryptUsing(new Encrypter(str_repeat('z', 32), 'AES-256-CBC'));
+
+    try {
+        expect(app(TokenStore::class)->get())->toBeNull();
+    } finally {
+        Model::encryptUsing(null);
+    }
+});
